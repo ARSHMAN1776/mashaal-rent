@@ -8,3 +8,8 @@ mashaal-rent-upload.zip
 
 __pycache__/
 *.pyc
+
+node_modules/
+
+# Local Netlify folder
+.netlify
