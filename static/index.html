@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e6b4e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Mashaal Rent">
+  <title>Mashaal Rent a Car</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e6b4e'/%3E%3Ctext x='16' y='22' font-family='Segoe UI,Arial' font-size='17' font-weight='700' fill='white' text-anchor='middle'%3EM%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="auth" id="auth" hidden>
+  <form class="auth-card" id="auth-form" autocomplete="off">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">Mashaal</div>
+        <div class="brand-sub">Rent a Car</div>
+      </div>
+    </div>
+    <h1 id="auth-title">Log in</h1>
+    <p class="auth-text" id="auth-text">Enter your password to open the rent register.</p>
+    <label class="field">
+      <span>Password</span>
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <label class="field" id="auth-confirm" hidden>
+      <span>Type the password again</span>
+      <input type="password" name="confirm" autocomplete="new-password">
+    </label>
+    <p class="form-error" role="alert"></p>
+    <button class="btn primary block" type="submit" id="auth-btn">Log in</button>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">Mashaal</div>
+        <div class="brand-sub">Rent a Car</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="#dashboard" data-view="dashboard">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Dashboard
+      </a>
+      <a href="#rent" data-view="rent">
+        <svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg>
+        Monthly Rent
+      </a>
+      <a href="#cars" data-view="cars">
+        <svg viewBox="0 0 24 24"><path d="M3 13l2-5.4A2 2 0 0 1 6.9 6.3h10.2a2 2 0 0 1 1.9 1.3L21 13v3.5a1 1 0 0 1-1 1h-1.2M3 13v3.5a1 1 0 0 0 1 1h1.2M3 13h18M9.3 17.5h5.4"/><circle cx="7.3" cy="17.3" r="1.9"/><circle cx="16.7" cy="17.3" r="1.9"/></svg>
+        Cars
+      </a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="today" id="today"></div>
+      <a class="foot-link" href="/api/backup" title="Download a copy of all your data. Keep it safe.">
+        <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
+        Download backup
+      </a>
+      <button class="foot-link" type="button" data-action="change-password">
+        <svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>
+        Change password
+      </button>
+      <button class="foot-link" type="button" data-action="logout">
+        <svg viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l4-4-4-4M14 12H4"/></svg>
+        Log out
+      </button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- ============ Dashboard ============ -->
+    <section class="view" id="view-dashboard" hidden>
+      <header class="page-head">
+        <div>
+          <p class="eyebrow">Overview</p>
+          <h1>Dashboard</h1>
+        </div>
+        <div class="month-switch"></div>
+      </header>
+
+      <div class="card welcome" id="dash-welcome" hidden>
+        <h2>Welcome — let's get started</h2>
+        <ol>
+          <li><strong>Register your cars.</strong> Car name, number and monthly rent.</li>
+          <li><strong>Every month, open Monthly Rent</strong> and mark which cars have paid.</li>
+          <li><strong>This dashboard</strong> then shows the totals by itself.</li>
+        </ol>
+        <a class="btn primary" href="#cars">Register first car</a>
+      </div>
+
+      <div id="dash-content">
+        <div class="stats" id="dash-stats"></div>
+
+        <div class="card progress" id="dash-progress"></div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head">
+              <h2>Rent pending</h2>
+              <span class="count warn" id="unpaid-count">0</span>
+            </div>
+            <ul class="car-list" id="dash-unpaid"></ul>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h2>Rent received</h2>
+              <span class="count ok" id="paid-count">0</span>
+            </div>
+            <ul class="car-list" id="dash-paid"></ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Last 12 months</h2>
+            <div class="legend">
+              <span><i class="lg-fill"></i>Received</span>
+              <span><i class="lg-exp"></i>Expected</span>
+            </div>
+          </div>
+          <div class="chart" id="dash-chart"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Monthly Rent ============ -->
+    <section class="view" id="view-rent" hidden>
+      <header class="page-head">
+        <div>
+          <p class="eyebrow">Rent register</p>
+          <h1>Monthly Rent</h1>
+        </div>
+        <div class="head-actions">
+          <div class="month-switch"></div>
+          <a class="btn" id="rent-export" href="#" title="Download this month as an Excel (CSV) file">
+            <svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
+            Excel
+          </a>
+        </div>
+      </header>
+
+      <div class="card summary-strip" id="rent-summary"></div>
+
+      <div class="card">
+        <div class="toolbar">
+          <label class="search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+            <input type="search" id="rent-search" placeholder="Search car, number or owner" autocomplete="off">
+          </label>
+          <div class="seg" id="rent-filter"></div>
+        </div>
+        <div class="table-wrap">
+          <table class="table cards-sm rent-table">
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>Car</th>
+                <th>Number</th>
+                <th class="num">Rent</th>
+                <th class="num">Received</th>
+                <th>Received on</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="rent-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="hint">Tip: type the amount and press <kbd>Enter</kbd> to mark a car as received.</p>
+    </section>
+
+    <!-- ============ Cars ============ -->
+    <section class="view" id="view-cars" hidden>
+      <header class="page-head">
+        <div>
+          <p class="eyebrow">Fleet</p>
+          <h1>Cars</h1>
+        </div>
+        <span class="head-note" id="cars-count"></span>
+      </header>
+
+      <form class="card form-card" id="car-form" autocomplete="off">
+        <div class="card-head"><h2>Register a new car</h2></div>
+        <div class="form-grid"></div>
+        <div class="form-foot">
+          <p class="form-error" role="alert"></p>
+          <button class="btn primary" type="submit">
+            <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>
+            Register car
+          </button>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="toolbar">
+          <label class="search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+            <input type="search" id="car-search" placeholder="Search car, number or owner" autocomplete="off">
+          </label>
+          <label class="check" id="removed-toggle" hidden>
+            <input type="checkbox"> <span></span>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table class="table cards-sm cars-table">
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>Car</th>
+                <th>Number</th>
+                <th>Owner / driver</th>
+                <th class="num">Monthly rent</th>
+                <th>Rent from</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="cars-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

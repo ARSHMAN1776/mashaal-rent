@@ -1,0 +1,10 @@
+# Your rent data and password. Never upload these.
+data/
+backups/
+*.db
+
+# Built from the files in this repo
+mashaal-rent-upload.zip
+
+__pycache__/
+*.pyc
