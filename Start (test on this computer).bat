@@ -1,12 +1,17 @@
 @echo off
 cd /d "%~dp0"
 title Mashaal Rent a Car
-where python >nul 2>nul
+where npm >nul 2>nul
 if errorlevel 1 (
-  echo Python is not installed on this computer.
-  echo Download it from https://www.python.org/downloads/
+  echo Node.js is not installed on this computer.
+  echo Download it from https://nodejs.org
   pause
   exit /b
 )
-python app.py
+if not exist node_modules (
+  echo Installing, please wait...
+  call npm install
+)
+start "" cmd /c "timeout /t 4 >nul & start http://127.0.0.1:8765"
+call npm run dev
 pause

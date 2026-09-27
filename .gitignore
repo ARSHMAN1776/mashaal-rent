@@ -1,10 +1,12 @@
-# Your rent data and password. Never upload these.
+# Rent data and password. Never upload these.
+.data/
 data/
 backups/
 *.db
 
-# Built from the files in this repo
-mashaal-rent-upload.zip
-
+# Installed and built files
+node_modules/
+public/app.js
+.netlify/
+.dev.log
 __pycache__/
-*.pyc
