@@ -20,6 +20,9 @@ Both have free plans.
 2. **Create the tables.**
    Open **SQL Editor** → **New query**. Open the file `supabase/schema.sql` from this project
    in Notepad, copy everything, paste it, and click **Run**. It should say **Success**.
+   This also sets up a private place to store payment screenshots.
+   (If you already ran an older copy of this file, run the new one again — it's safe, and it
+   won't touch any data you already have. It only adds the screenshot feature.)
 
 3. **Create your login.**
    Open **Authentication** → **Users** → **Add user** → **Create new user**.
@@ -68,13 +71,21 @@ Keep the file on your computer or in Google Drive.
 **Bring back data from a backup.**
 In the app, click **Restore backup** (on a computer) and choose the file.
 This replaces all current cars and rent entries with the ones in the file.
+Note: backup files do not include payment screenshots, so restoring one removes them.
+
+**Payment screenshots.**
+When marking rent as paid, you can attach a photo of the payment (or a PDF).
+They're kept in a private Supabase Storage bucket named `receipts` — only logged-in
+users can see them. The free plan gives 1 GB of storage, which is several thousand
+photos, so this normally doesn't run out.
 
 **Forgot your password?**
 In Supabase, open **Authentication** → **Users**, delete your user, and add it again with a new password
 (Part 1, step 3). Your cars and rent data are not affected.
 
 **See or fix data directly.**
-In Supabase, open **Table Editor**. The data is in the `cars` and `payments` tables.
+In Supabase, open **Table Editor**. The data is in the `cars` and `payments` tables
+(screenshots are listed in `receipts`, and the files themselves are under **Storage**).
 
 ---
 

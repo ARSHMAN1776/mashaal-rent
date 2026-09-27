@@ -2,7 +2,7 @@
 
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "./config";
-import type { BackupFile, Car, CarFields, Payment } from "./types";
+import type { BackupFile, Car, CarFields, Payment, Receipt } from "./types";
 
 export const isConfigured = /^https:\/\/.+/.test(SUPABASE_URL) && !SUPABASE_KEY.startsWith("PASTE_");
 
@@ -82,8 +82,81 @@ export async function savePayment(p: Payment): Promise<void> {
 }
 
 export async function deletePayment(carId: number, month: string): Promise<void> {
+  // The database row for each receipt is removed together with the payment
+  // (see "on delete cascade" in schema.sql), but the file itself is not, so
+  // it is deleted here first.
+  const receipts = await receiptsFor(carId, month);
+  if (receipts.length) await removeReceiptFiles(receipts.map(r => r.path));
   const { error } = await supabase.from("payments").delete().eq("car_id", carId).eq("month", month);
   if (error) fail(error);
+}
+
+/* ---------------- payment screenshots ---------------- */
+
+const RECEIPTS_BUCKET = "receipts";
+const MAX_RECEIPT_MB = 8;
+
+export async function receiptsFor(carId: number, month: string): Promise<Receipt[]> {
+  const { data, error } = await supabase.from("receipts").select("*").eq("car_id", carId).eq("month", month).order("uploaded_at");
+  if (error) fail(error);
+  return data as Receipt[];
+}
+
+/** Every screenshot of this car, across all months (used by the History popup). */
+export async function receiptsForCar(carId: number): Promise<Receipt[]> {
+  const { data, error } = await supabase.from("receipts").select("*").eq("car_id", carId).order("month");
+  if (error) fail(error);
+  return data as Receipt[];
+}
+
+/** How many screenshots each car has for one month (used by the Monthly Rent table). */
+export async function receiptCountsForMonth(month: string): Promise<Map<number, number>> {
+  const { data, error } = await supabase.from("receipts").select("car_id").eq("month", month);
+  if (error) fail(error);
+  const counts = new Map<number, number>();
+  for (const { car_id } of data as { car_id: number }[]) counts.set(car_id, (counts.get(car_id) ?? 0) + 1);
+  return counts;
+}
+
+/** Uploads a screenshot for a rent entry that has already been saved. */
+export async function uploadReceipt(carId: number, month: string, file: File): Promise<Receipt> {
+  const ext = (/\.([a-z0-9]+)$/i.exec(file.name)?.[1] ?? "jpg").toLowerCase();
+  const path = `${carId}/${month}/${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase.storage.from(RECEIPTS_BUCKET).upload(path, file, {
+    contentType: file.type || undefined,
+  });
+  if (uploadError) {
+    const msg = uploadError.message;
+    if (/exceeded|maximum|size limit/i.test(msg)) throw new Error(`This file is larger than ${MAX_RECEIPT_MB} MB. Please choose a smaller one.`);
+    if (/mime type|not allowed|not supported/i.test(msg)) throw new Error("Please choose an image (JPG, PNG, WEBP, HEIC) or a PDF.");
+    if (/fetch|network/i.test(msg)) throw new Error("Can't reach the database. Check your internet connection and try again.");
+    throw new Error(msg || "The screenshot could not be uploaded.");
+  }
+  const { data, error } = await supabase.from("receipts").insert({ car_id: carId, month, path }).select().single();
+  if (error) {
+    await removeReceiptFiles([path]); // the database row failed, so don't leave the file behind
+    fail(error);
+  }
+  return data as Receipt;
+}
+
+/** A link to view or download one screenshot. Expires after a few minutes. */
+export async function receiptUrl(path: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(RECEIPTS_BUCKET).createSignedUrl(path, 300);
+  if (error) throw new Error(error.message || "Could not open this screenshot.");
+  return data.signedUrl;
+}
+
+export async function deleteReceipt(receipt: Pick<Receipt, "id" | "path">): Promise<void> {
+  await removeReceiptFiles([receipt.path]);
+  const { error } = await supabase.from("receipts").delete().eq("id", receipt.id);
+  if (error) fail(error);
+}
+
+async function removeReceiptFiles(paths: string[]): Promise<void> {
+  const { error } = await supabase.storage.from(RECEIPTS_BUCKET).remove(paths);
+  // A file that is already gone should not block the rest of the action.
+  if (error && !/not found/i.test(error.message)) throw new Error(error.message || "Could not remove the screenshot file.");
 }
 
 /* ---------------- backup ---------------- */

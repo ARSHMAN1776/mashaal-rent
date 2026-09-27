@@ -28,7 +28,7 @@ Then open http://127.0.0.1:8765
 
 | Path | What it is |
 | --- | --- |
-| `supabase/schema.sql` | Database tables, security rules and the restore function. Run once in Supabase. |
+| `supabase/schema.sql` | Database tables, security rules, the restore function, and the private storage bucket for payment screenshots. Run once in Supabase. |
 | `src/client/config.ts` | Your Supabase project URL and anon key |
 | `src/client/app.ts` | Screens and buttons |
 | `src/client/db.ts` | Reading and saving data in Supabase |

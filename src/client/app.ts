@@ -2,7 +2,7 @@ import * as db from "./db";
 import {
   carHistory, checkBackup, cleanCar, cleanPayment, dashboard, monthCsv, monthSheet, shiftMonth, thisMonth, todayISO,
 } from "./rent";
-import type { Car, MonthRow, MonthSheet } from "./types";
+import type { Car, MonthRow, MonthSheet, Receipt } from "./types";
 
 /* ================= helpers ================= */
 
@@ -59,6 +59,8 @@ function saveFile(content: string, type: string, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const CAMERA_SVG = `<svg viewBox="0 0 24 24" class="ic-sm"><path d="M4 8h3l1.4-2.1a1 1 0 0 1 .8-.4h5.6a1 1 0 0 1 .8.4L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.2"/></svg>`;
+
 /* ================= state ================= */
 
 const state = {
@@ -66,6 +68,7 @@ const state = {
   rows: new Map<number, MonthRow>(), // car id -> row for the month on screen
   sheet: null as MonthSheet | null,  // Monthly Rent data
   cars: [] as Car[],
+  receiptCounts: new Map<number, number>(), // car id -> screenshots for the month on screen
   rentFilter: "all" as "all" | "pending" | "paid",
   rentQuery: "",
   carQuery: "",
@@ -281,11 +284,14 @@ async function renderDashboard() {
 
 async function renderRent() {
   const month = state.month;
-  const [cars, payments] = await Promise.all([db.listCars(), db.paymentsBetween(month, month)]);
+  const [cars, payments, receiptCounts] = await Promise.all([
+    db.listCars(), db.paymentsBetween(month, month), db.receiptCountsForMonth(month),
+  ]);
   if (month !== state.month) return;
   const d = monthSheet(cars, payments, month);
   remember(d.rows);
   state.sheet = d;
+  state.receiptCounts = receiptCounts;
   const s = d.summary;
   $("#rent-summary").innerHTML = `
     <div><span>Rent received</span><strong>${rs(s.collected)}</strong></div>
@@ -295,7 +301,7 @@ async function renderRent() {
   drawRentTable();
 }
 
-function rentRow(r: MonthRow, i: number): string {
+function rentRow(r: MonthRow, i: number, receiptCounts: Map<number, number>): string {
   const car = `<div class="car-cell"><strong>${esc(r.name)}</strong>${r.owner ? `<span>${esc(r.owner)}</span>` : ""}</div>`;
   // data-label is shown as a small heading when the row turns into a card on phones
   const head = `<td class="num idx c-idx">${i + 1}</td><td class="c-car">${car}</td>
@@ -304,10 +310,14 @@ function rentRow(r: MonthRow, i: number): string {
   if (r.paid) {
     const amount = r.amount ?? 0;
     const short = amount < r.monthly_rent ? `<span class="short-note">${rs(r.monthly_rent - amount)} less</span>` : "";
+    const count = receiptCounts.get(r.id) ?? 0;
+    const badge = count
+      ? `<button type="button" class="receipt-badge" data-action="edit-pay" data-id="${r.id}" title="${plural(count, "screenshot")} attached — open to view">${CAMERA_SVG}${count > 1 ? count : ""}</button>`
+      : "";
     return `<tr data-id="${r.id}">${head}
       <td class="num strong c-amt" data-label="Amount received">${rs(amount)}${short}</td>
       <td class="c-date" data-label="Date received">${fmtDate(r.paid_on)}${r.pay_note ? `<div class="small muted">${esc(r.pay_note)}</div>` : ""}</td>
-      <td class="c-status"><span class="badge ok">Paid</span></td>
+      <td class="c-status"><span class="badge ok">Paid</span>${badge}</td>
       <td class="actions c-act">
         <button class="btn sm ghost" type="button" data-action="edit-pay" data-id="${r.id}">Edit</button>
         <button class="btn sm ghost danger" type="button" data-action="undo-pay" data-id="${r.id}">Undo</button>
@@ -317,7 +327,10 @@ function rentRow(r: MonthRow, i: number): string {
     <td class="num c-amt" data-label="Amount received"><input class="in-amt" data-money inputmode="numeric" value="${nf.format(r.monthly_rent)}" aria-label="Amount received"></td>
     <td class="c-date" data-label="Date received"><input class="in-date" type="date" value="${todayISO()}" aria-label="Date received"></td>
     <td class="c-status"><span class="badge warn">Not paid</span></td>
-    <td class="actions c-act"><button class="btn sm primary" type="button" data-action="quick-receive" data-id="${r.id}">Mark paid</button></td>
+    <td class="actions c-act">
+      <button class="btn sm primary" type="button" data-action="quick-receive" data-id="${r.id}">Mark paid</button>
+      <button class="btn sm ghost icon-only" type="button" data-action="receive" data-id="${r.id}" title="Mark paid with a screenshot">${CAMERA_SVG}</button>
+    </td>
   </tr>`;
 }
 
@@ -341,7 +354,7 @@ function drawRentTable() {
     (state.rentFilter === "all" || (state.rentFilter === "paid") === r.paid) &&
     (!q || `${r.name} ${r.number} ${r.owner}`.toLowerCase().includes(q)));
   body.innerHTML = rows.length
-    ? rows.map(rentRow).join("")
+    ? rows.map((r, i) => rentRow(r, i, state.receiptCounts)).join("")
     : `<tr><td colspan="8" class="empty">No cars match.</td></tr>`;
 }
 
@@ -485,9 +498,25 @@ function openDialog(html: string, { wide = false, onSave }: { wide?: boolean; on
   if (first) { first.focus(); first.select(); }
 }
 
-function openPaymentDialog(row: MonthRow) {
+function receiptListHtml(receipts: Receipt[]): string {
+  if (!receipts.length) return "";
+  return `
+    <div class="field"><span>Payment screenshot${receipts.length > 1 ? "s" : ""}</span>
+      <div class="receipt-list">
+        ${receipts.map(r => `
+          <div class="receipt-item" data-receipt-id="${r.id}" data-receipt-path="${esc(r.path)}">
+            <button type="button" class="btn sm ghost" data-action="view-receipt">${CAMERA_SVG} View</button>
+            <span class="small muted">${fmtDate(r.uploaded_at.slice(0, 10))}</span>
+            <button type="button" class="btn sm ghost danger" data-action="remove-receipt">Remove</button>
+          </div>`).join("")}
+      </div>
+    </div>`;
+}
+
+async function openPaymentDialog(row: MonthRow) {
   const editing = row.paid;
   const month = state.month;
+  const receipts = editing ? await db.receiptsFor(row.id, month) : [];
   openDialog(`
     <form class="dlg" autocomplete="off">
       <header>
@@ -502,6 +531,9 @@ function openPaymentDialog(row: MonthRow) {
           <input name="paid_on" type="date" required value="${editing && row.paid_on ? row.paid_on : todayISO()}"></label>
         <label class="field"><span>Note <em>(optional)</em></span>
           <input name="note" placeholder="e.g. cash, bank transfer" value="${esc(editing ? row.pay_note : "")}"></label>
+        ${receiptListHtml(receipts)}
+        <label class="field"><span>${receipts.length ? "Add another screenshot" : "Payment screenshot"} <em>(optional)</em></span>
+          <input name="receipt" type="file" accept="image/*,.pdf" capture="environment"></label>
         <p class="form-error" role="alert"></p>
       </div>
       <footer>
@@ -512,10 +544,29 @@ function openPaymentDialog(row: MonthRow) {
     onSave: async form => {
       const payment = cleanPayment({ ...formValues(form), car_id: row.id, month });
       await db.savePayment(payment);
+      const file = $<HTMLInputElement>("input[name=receipt]", form).files?.[0];
+      if (file) {
+        try { await db.uploadReceipt(row.id, month, file); }
+        catch (err) { toast(`Rent saved, but the screenshot was not uploaded: ${errorText(err)}`, "error"); }
+      }
       toast(`Saved: ${row.name} (${row.number}) paid ${rs(payment.amount)}`);
       void render();
     },
   });
+}
+
+async function viewReceipt(el: HTMLElement) {
+  const path = el.closest<HTMLElement>("[data-receipt-path]")!.dataset.receiptPath!;
+  window.open(await db.receiptUrl(path), "_blank", "noopener");
+}
+
+async function removeReceiptClick(el: HTMLElement) {
+  const item = el.closest<HTMLElement>("[data-receipt-id]")!;
+  if (!confirm("Remove this screenshot? This cannot be undone.")) return;
+  await db.deleteReceipt({ id: Number(item.dataset.receiptId), path: item.dataset.receiptPath! });
+  item.remove();
+  toast("Screenshot removed.");
+  void render(); // updates the camera badge on the main table
 }
 
 function openCarDialog(c: Car) {
@@ -538,14 +589,29 @@ function openCarDialog(c: Car) {
 }
 
 async function openHistory(car: Car) {
-  const d = carHistory(car, await db.paymentsForCar(car.id));
-  const rows = d.months.map(m => `
+  const [payments, receipts] = await Promise.all([db.paymentsForCar(car.id), db.receiptsForCar(car.id)]);
+  const d = carHistory(car, payments);
+  const firstReceipt = new Map<string, Receipt>();
+  const countByMonth = new Map<string, number>();
+  for (const r of receipts) {
+    countByMonth.set(r.month, (countByMonth.get(r.month) ?? 0) + 1);
+    if (!firstReceipt.has(r.month)) firstReceipt.set(r.month, r);
+  }
+  const rows = d.months.map(m => {
+    const first = firstReceipt.get(m.month);
+    const count = countByMonth.get(m.month) ?? 0;
+    const badge = first
+      ? `<button type="button" class="receipt-badge" data-action="view-receipt" data-receipt-path="${esc(first.path)}"
+          title="${count > 1 ? `View screenshot (1 of ${count})` : "View screenshot"}">${CAMERA_SVG}</button>`
+      : "";
+    return `
     <tr>
       <td>${monthLabel(m.month)}</td>
       <td>${m.paid ? '<span class="badge ok">Paid</span>' : '<span class="badge warn">Not paid</span>'}</td>
-      <td class="num ${m.paid ? "strong" : "muted"}">${m.paid ? rs(m.amount) : "—"}</td>
+      <td class="num ${m.paid ? "strong" : "muted"}">${m.paid ? rs(m.amount) : "—"}${badge}</td>
       <td class="h-date">${m.paid ? fmtDate(m.paid_on) : ""}${m.note ? `<div class="small muted">${esc(m.note)}</div>` : ""}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   openDialog(`
     <div class="dlg">
       <header>
@@ -617,7 +683,8 @@ function openRestoreDialog() {
       <div class="dlg-body">
         <label class="field"><span>Backup file</span>
           <input name="file" type="file" accept=".json,application/json" required></label>
-        <p class="warn-box">This <strong>replaces all cars and rent entries</strong> with the ones in the file.
+        <p class="warn-box">This <strong>replaces all cars and rent entries</strong> with the ones in the file,
+          and removes all payment screenshots (backup files do not include them).
           Download a backup of the current data first if you might need it.</p>
         <p class="form-error" role="alert"></p>
       </div>
@@ -666,9 +733,11 @@ document.addEventListener("click", e => {
       drawRentTable();
       break;
     case "receive":
-    case "edit-pay": if (row) openPaymentDialog(row); break;
+    case "edit-pay": if (row) void run(() => openPaymentDialog(row)); break;
     case "quick-receive": if (row) void quickReceive(el as HTMLButtonElement, row); break;
     case "undo-pay": if (row) void run(() => undoPayment(row)); break;
+    case "view-receipt": void run(() => viewReceipt(el)); break;
+    case "remove-receipt": void run(() => removeReceiptClick(el)); break;
     case "export": void run(exportMonth); break;
     case "edit-car": if (car) openCarDialog(car); break;
     case "delete-car": if (car) void run(() => deleteCar(car)); break;

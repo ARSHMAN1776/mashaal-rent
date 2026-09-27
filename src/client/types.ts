@@ -23,6 +23,15 @@ export interface Payment {
 /** The fields you type in when adding or editing a car. */
 export type CarFields = Pick<Car, "name" | "number" | "owner" | "notes" | "monthly_rent" | "start_month">;
 
+/** A payment screenshot or PDF, stored in the "receipts" Supabase Storage bucket. */
+export interface Receipt {
+  id: number;
+  car_id: number;
+  month: string; // YYYY-MM
+  path: string;
+  uploaded_at: string;
+}
+
 /** One car's line for a given month. */
 export interface MonthRow {
   id: number;
