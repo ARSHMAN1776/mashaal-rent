@@ -4,7 +4,7 @@ import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "./config";
 import type { BackupFile, Car, CarFields, Payment, Receipt } from "./types";
 
-export const isConfigured = /^https:\/\/.+/.test(SUPABASE_URL) && !SUPABASE_KEY.startsWith("PASTE_");
+export const isConfigured = /^https:\/\/.+/.test(SUPABASE_URL) && SUPABASE_KEY.length > 0;
 
 export const supabase = createClient(
   isConfigured ? SUPABASE_URL : "https://not-configured.supabase.co",

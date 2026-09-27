@@ -4,6 +4,9 @@ data/
 backups/
 *.db
 
+# Your local Supabase project details (see .env.example)
+.env
+
 # Installed and built files
 node_modules/
 public/app.js

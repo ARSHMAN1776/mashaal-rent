@@ -39,20 +39,33 @@ Both have free plans.
    - **Project URL** (looks like `https://abcdxyz.supabase.co`)
    - **anon public** key (or **publishable** key)
 
-   Paste them into `src/client/config.ts`, or send them to Claude to do it.
-   **Never** use the `service_role` or `secret` key.
+   You'll paste these into Netlify or Vercel as environment variables in Part 2 — send
+   them to Claude and it can set them for you there. **Never** use the `service_role` or `secret` key.
 
 ## Part 2: Put the website online
 
-Use **one** of these. Both read their settings from the project files, so don't change any settings.
+Use **one** of these. Both read their build settings from the project files, so you
+only need to add the two Supabase values as environment variables — nothing else to change.
 
 **Netlify:** **Add new project** → **Import an existing project** → **GitHub** →
-pick **ARSHMAN1776/mashaal-rent** → **Deploy**.
+pick **ARSHMAN1776/mashaal-rent**. Before clicking Deploy, open **Add environment variables**
+and add both:
+| Key | Value |
+| --- | --- |
+| `SUPABASE_URL` | your Project URL |
+| `SUPABASE_ANON_KEY` | your anon / publishable key |
 
-**Vercel:** **Add New…** → **Project** → import **ARSHMAN1776/mashaal-rent** → **Deploy**.
+Then click **Deploy**. (Already deployed without these? Go to **Site configuration** →
+**Environment variables** → **Add a variable**, add both, then **Deploys** → **Trigger deploy**.)
 
-If you already made a site for this repo, it rebuilds by itself after each push.
-You don't need to make a new one.
+**Vercel:** **Add New…** → **Project** → import **ARSHMAN1776/mashaal-rent**. Open
+**Environment Variables** and add the same two (`SUPABASE_URL`, `SUPABASE_ANON_KEY`), then **Deploy**.
+(Already deployed? **Settings** → **Environment Variables** → add both → **Deployments** →
+**Redeploy** on the latest one.)
+
+If you already made a site for this repo, it rebuilds by itself after each push,
+but you still need to add the two environment variables once — a build without them fails
+with a message saying which one is missing.
 
 When it's published, open the address and log in with the email and password from Part 1, step 3.
 
@@ -91,5 +104,7 @@ In Supabase, open **Table Editor**. The data is in the `cars` and `payments` tab
 
 ## Test on your own computer (optional)
 
-You need Node.js (https://nodejs.org). Double-click **`Start (test on this computer).bat`**.
+You need Node.js (https://nodejs.org). The first time, copy `.env.example` to a new file
+named `.env` and paste in the same two Supabase values from Part 1, step 5.
+Then double-click **`Start (test on this computer).bat`**.
 The app opens at `http://127.0.0.1:8765` and uses the same Supabase data as the online version.

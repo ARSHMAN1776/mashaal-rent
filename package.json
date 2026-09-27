@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Monthly rent register for Mashaal Rent a Car",
   "scripts": {
-    "build": "tsc && esbuild src/client/app.ts --bundle --minify --target=es2020 --outfile=public/app.js",
-    "dev": "esbuild src/client/app.ts --bundle --target=es2020 --outfile=public/app.js --servedir=public --serve=127.0.0.1:8765",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --serve",
     "check": "tsc"
   },
   "engines": {
