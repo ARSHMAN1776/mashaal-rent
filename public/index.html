@@ -13,7 +13,7 @@
 </head>
 <body>
 <div class="auth" id="auth" hidden>
-  <form class="auth-card" id="auth-form" autocomplete="off">
+  <form class="auth-card" id="auth-form">
     <div class="brand">
       <div class="brand-mark">M</div>
       <div>
@@ -21,15 +21,15 @@
         <div class="brand-sub">Rent a Car</div>
       </div>
     </div>
-    <h1 id="auth-title">Log in</h1>
-    <p class="auth-text" id="auth-text">Enter your password to open the rent register.</p>
+    <h1>Log in</h1>
+    <p class="auth-text">Enter your email and password to open the rent register.</p>
+    <label class="field">
+      <span>Email</span>
+      <input type="email" name="email" required autocomplete="username">
+    </label>
     <label class="field">
       <span>Password</span>
       <input type="password" name="password" required autocomplete="current-password">
-    </label>
-    <label class="field" id="auth-confirm" hidden>
-      <span>Type the password again</span>
-      <input type="password" name="confirm" autocomplete="new-password">
     </label>
     <p class="form-error" role="alert"></p>
     <button class="btn primary block" type="submit" id="auth-btn">Log in</button>
@@ -61,10 +61,11 @@
     </nav>
     <div class="sidebar-foot">
       <div class="today" id="today"></div>
-      <a class="foot-link" href="/api/backup" title="Download a copy of all your data. Keep it safe.">
+      <div class="today" id="user-email"></div>
+      <button class="foot-link" type="button" data-action="backup" title="Download a copy of all your data. Keep it safe.">
         <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
         Download backup
-      </a>
+      </button>
       <button class="foot-link" type="button" data-action="restore-backup">
         <svg viewBox="0 0 24 24"><path d="M12 20V9m0 0l-4 4m4-4l4 4M5 5h14"/></svg>
         Restore backup
@@ -145,10 +146,10 @@
         </div>
         <div class="head-actions">
           <div class="month-switch"></div>
-          <a class="btn" id="rent-export" href="#" title="Download this month as an Excel (CSV) file">
+          <button class="btn" type="button" data-action="export" title="Download this month as an Excel (CSV) file">
             <svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
             Excel
-          </a>
+          </button>
         </div>
       </header>
 

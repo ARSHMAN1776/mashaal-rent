@@ -1,71 +1,84 @@
-# Mashaal Rent a Car: how to put it online (free, on Netlify)
+# Mashaal Rent a Car: how to put it online (free)
 
-The app runs completely on **Netlify**:
+How it works:
 
-- The pages are normal web pages.
-- The server part is a Netlify Function.
-- Your data is saved in **Netlify Blobs**, Netlify's own storage.
+- **Supabase** keeps your data (cars and rent) and handles the login.
+- **Netlify or Vercel** shows the website. It is plain web pages, so either one works.
 
-You don't need any other account or database. Your data stays safe when you publish a new version.
+Both have free plans.
 
 ---
 
-## Part 1: Connect the GitHub repo to Netlify
+## Part 1: Set up Supabase (about 10 minutes)
 
-The app must be deployed **from GitHub**. Dragging and dropping the folder onto Netlify
-will not work, because Netlify then skips the build step that creates the server part.
+1. Go to **https://supabase.com**, sign in, and click **New project**.
+   - Give it a name, for example `mashaal-rent`.
+   - Choose a **database password** and keep it safe. The app does not use it, but Supabase asks for it.
+   - Region: pick the one closest to you, for example **Mumbai** or **Singapore**.
+   - Wait 1–2 minutes until the project is ready.
 
-1. Go to **https://app.netlify.com** and log in (you can log in with GitHub).
-2. Click **Add new project** (or **Add new site**), then **Import an existing project**.
-3. Choose **GitHub** and pick the repo **ARSHMAN1776/mashaal-rent**.
-4. Netlify reads the settings from the `netlify.toml` file in the repo. You don't need to change anything:
-   - Build command: `npm run build`
-   - Publish directory: `public`
-5. Click **Deploy**. Wait 1–2 minutes until it says **Published**.
+2. **Create the tables.**
+   Open **SQL Editor** → **New query**. Open the file `supabase/schema.sql` from this project
+   in Notepad, copy everything, paste it, and click **Run**. It should say **Success**.
 
-**Already made a Netlify site earlier that shows "Page not found"?**
-Delete that old site (**Site configuration → Delete this site**) and do Part 1 again.
-If the old site is already connected to this GitHub repo, you don't need to delete it:
-it rebuilds by itself after every push.
+3. **Create your login.**
+   Open **Authentication** → **Users** → **Add user** → **Create new user**.
+   Type your email and a password, tick **Auto Confirm User**, and click **Create user**.
+   This email and password are what you use to log in to the app.
+   Add more users the same way if other people need access.
 
-## Part 2: Set your password (do this right away)
+4. **Stop strangers from signing up.**
+   Open **Authentication** → **Sign In / Providers** (on some projects it is under **Settings**)
+   and turn **off** "Allow new users to sign up". Click **Save**.
 
-1. Open your Netlify address, for example `https://mashaal-rent.netlify.app`
-2. The app asks you to **create a password**. Choose one and write it down somewhere safe.
-3. Done. From now on, anyone who opens the address needs this password.
+5. **Copy two values.**
+   Open **Project Settings** → **API** (or click **Connect** at the top). Copy:
+   - **Project URL** (looks like `https://abcdxyz.supabase.co`)
+   - **anon public** key (or **publishable** key)
 
-> Important: until you set the password, anyone who opens the address could set it.
-> So set it right after the first deploy.
+   Paste them into `src/client/config.ts`, or send them to Claude to do it.
+   **Never** use the `service_role` or `secret` key.
 
-**Tip:** you can change the address under **Site configuration → Change site name**.
+## Part 2: Put the website online
+
+Use **one** of these. Both read their settings from the project files, so don't change any settings.
+
+**Netlify:** **Add new project** → **Import an existing project** → **GitHub** →
+pick **ARSHMAN1776/mashaal-rent** → **Deploy**.
+
+**Vercel:** **Add New…** → **Project** → import **ARSHMAN1776/mashaal-rent** → **Deploy**.
+
+If you already made a site for this repo, it rebuilds by itself after each push.
+You don't need to make a new one.
+
+When it's published, open the address and log in with the email and password from Part 1, step 3.
 
 ---
 
 ## Things to remember
 
+**Use it at least once a week, or Supabase pauses it.**
+On the free plan, Supabase pauses a project after 7 days with no use.
+If that happens, open the project in Supabase and click **Restore project**. Your data is kept.
+
 **Download a backup once a month.**
 In the app, click **Download backup** (bottom left on a computer, the ⤓ icon on a phone).
-Keep the file on your computer or in Google Drive. The app also keeps its own daily copy
-for the last 30 days.
+Keep the file on your computer or in Google Drive.
 
-**Bring back data from a backup file.**
-In the app, click **Restore backup** (on a computer) and choose the backup file.
+**Bring back data from a backup.**
+In the app, click **Restore backup** (on a computer) and choose the file.
 This replaces all current cars and rent entries with the ones in the file.
 
 **Forgot your password?**
-1. In Netlify, open your site and find **Blobs** in the menu.
-2. Open the store named **mashaal-rent**.
-3. Delete the entry named **auth**.
-4. Open the app. It asks you to create a new password. Your cars and rent data are not touched.
+In Supabase, open **Authentication** → **Users**, delete your user, and add it again with a new password
+(Part 1, step 3). Your cars and rent data are not affected.
 
-**Updating the app later.**
-Push the new code to the GitHub repo. Netlify rebuilds and publishes it by itself,
-and your data stays as it is.
+**See or fix data directly.**
+In Supabase, open **Table Editor**. The data is in the `cars` and `payments` tables.
 
 ---
 
 ## Test on your own computer (optional)
 
 You need Node.js (https://nodejs.org). Double-click **`Start (test on this computer).bat`**.
-The app opens at `http://127.0.0.1:8765`. Data you enter there is saved in the `.data` folder
-on your computer and is separate from the online version.
+The app opens at `http://127.0.0.1:8765` and uses the same Supabase data as the online version.

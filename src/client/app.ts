@@ -1,6 +1,8 @@
-import type {
-  Car, CarHistory, CarWithCount, Dashboard, MonthRow, MonthSheet, SessionInfo,
-} from "../shared/types";
+import * as db from "./db";
+import {
+  carHistory, checkBackup, cleanCar, cleanPayment, dashboard, monthCsv, monthSheet, shiftMonth, thisMonth, todayISO,
+} from "./rent";
+import type { Car, MonthRow, MonthSheet } from "./types";
 
 /* ================= helpers ================= */
 
@@ -12,7 +14,6 @@ function $<T extends Element = HTMLElement>(sel: string, root: ParentNode = docu
 const $opt = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel);
 const $$ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)];
 
-const pad = (n: number) => String(n).padStart(2, "0");
 const nf = new Intl.NumberFormat("en-PK", { maximumFractionDigits: 0 });
 const rs = (n: number | null | undefined) => "Rs " + nf.format(n || 0);
 const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, c =>
@@ -20,17 +21,6 @@ const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, c =>
 const parseAmount = (v: unknown) => Number(String(v ?? "").replace(/[,\s]/g, ""));
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-const thisMonth = () => todayISO().slice(0, 7);
-
-function shiftMonth(m: string, delta: number): string {
-  const [y, mo] = m.split("-").map(Number);
-  const i = y * 12 + (mo - 1) + delta;
-  return `${Math.floor(i / 12)}-${pad((i % 12) + 1)}`;
-}
 function monthDate(m: string): Date {
   const [y, mo] = m.split("-").map(Number);
   return new Date(y, mo - 1, 1);
@@ -60,40 +50,27 @@ function formValues(form: HTMLFormElement): Record<string, string> {
   return out;
 }
 
-/* ================= state & server calls ================= */
+function saveFile(content: string, type: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ================= state ================= */
 
 const state = {
   month: thisMonth(),
   rows: new Map<number, MonthRow>(), // car id -> row for the month on screen
   sheet: null as MonthSheet | null,  // Monthly Rent data
-  cars: [] as CarWithCount[],
+  cars: [] as Car[],
   rentFilter: "all" as "all" | "pending" | "paid",
   rentQuery: "",
   carQuery: "",
   showRemoved: false,
 };
-
-class LoginNeeded extends Error {}
-
-async function api<T = unknown>(path: string, { method = "GET", body }: { method?: string; body?: unknown } = {}): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch("/api/" + path, {
-      method,
-      headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  } catch {
-    throw new Error("Can't reach the server. Check your internet connection and try again.");
-  }
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && !["login", "session"].includes(path)) {
-    showAuth("login");
-    throw new LoginNeeded();
-  }
-  if (!res.ok) throw new Error((data as { error?: string }).error || "Something went wrong. Please try again.");
-  return data as T;
-}
 
 let toastTimer: number | undefined;
 function toast(msg: string, kind: "ok" | "error" = "ok") {
@@ -106,10 +83,19 @@ function toast(msg: string, kind: "ok" | "error" = "ok") {
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+/** Shows the error; sends the user to the login screen if the login has expired. */
+function handleError(err: unknown, show: (msg: string) => void = msg => toast(msg, "error")) {
+  if (err instanceof db.SessionError) {
+    showAuth();
+    return;
+  }
+  show(errorText(err));
+}
+
 // Runs an action and shows any error as a message.
 async function run(fn: () => Promise<unknown>) {
   try { await fn(); }
-  catch (err) { if (!(err instanceof LoginNeeded)) toast(errorText(err), "error"); }
+  catch (err) { handleError(err); }
 }
 
 function remember(rows: MonthRow[]) {
@@ -118,30 +104,22 @@ function remember(rows: MonthRow[]) {
 
 /* ================= login ================= */
 
-let authMode: "login" | "setup" = "login";
 const dlg = $<HTMLDialogElement>("#dlg");
 
-function showAuth(mode: "login" | "setup") {
-  authMode = mode;
-  const setup = mode === "setup";
+function showAuth() {
   $("#app").hidden = true;
   $("#auth").hidden = false;
   if (dlg.open) dlg.close();
-  $("#auth-title").textContent = setup ? "Create your password" : "Log in";
-  $("#auth-text").textContent = setup
-    ? "This is the first time the app is opened. Choose a password (at least 6 characters). You will need it every time you log in."
-    : "Enter your password to open the rent register.";
-  $("#auth-confirm").hidden = !setup;
-  $<HTMLInputElement>("#auth-confirm input").required = setup;
-  $("#auth-btn").textContent = setup ? "Save password and continue" : "Log in";
   $(".form-error", $("#auth-form")).textContent = "";
-  $<HTMLFormElement>("#auth-form").reset();
-  $<HTMLInputElement>("#auth-form input[name=password]").focus();
+  $<HTMLInputElement>("#auth-form input[name=password]").value = "";
+  const email = $<HTMLInputElement>("#auth-form input[name=email]");
+  (email.value ? $<HTMLInputElement>("#auth-form input[name=password]") : email).focus();
 }
 
-function showApp() {
+function showApp(email: string | undefined) {
   $("#auth").hidden = true;
   $("#app").hidden = false;
+  $("#user-email").textContent = email ?? "";
   void render();
 }
 
@@ -152,14 +130,17 @@ $<HTMLFormElement>("#auth-form").addEventListener("submit", async e => {
   const err = $(".form-error", form);
   const btn = $<HTMLButtonElement>("#auth-btn");
   err.textContent = "";
-  if (authMode === "setup" && f.password !== f.confirm) {
-    err.textContent = "The two passwords do not match.";
-    return;
-  }
   btn.disabled = true;
   try {
-    await api(authMode === "setup" ? "setup" : "login", { method: "POST", body: { password: f.password } });
-    showApp();
+    const { data, error } = await db.supabase.auth.signInWithPassword({ email: f.email.trim(), password: f.password });
+    if (error) {
+      throw new Error(/invalid/i.test(error.message)
+        ? "Wrong email or password."
+        : /fetch|network/i.test(error.message)
+          ? "Can't reach the database. Check your internet connection and try again."
+          : error.message);
+    }
+    showApp(data.user?.email);
   } catch (ex) {
     err.textContent = errorText(ex);
     $<HTMLInputElement>("input[name=password]", form).select();
@@ -227,7 +208,10 @@ function stat(label: string, value: string | number, sub: string, tone = "") {
 }
 
 async function renderDashboard() {
-  const d = await api<Dashboard>("dashboard?m=" + state.month);
+  const month = state.month;
+  const [cars, payments] = await Promise.all([db.listCars(), db.paymentsBetween(shiftMonth(month, -11), month)]);
+  if (month !== state.month) return; // the month changed while loading
+  const d = dashboard(cars, payments, month);
   remember(d.rows);
   const s = d.summary;
   const noCars = d.active_cars === 0 && d.rows.length === 0;
@@ -243,12 +227,12 @@ async function renderDashboard() {
     stat("Cars not paid", s.unpaid_cars,
       s.unpaid_cars ? `${rs(s.pending)} still to come` : "Everyone has paid", s.unpaid_cars ? "warn" : ""),
     stat("Last 12 months", rs(yearTotal),
-      `${monthLabel(d.trend[0].month, "short")} to ${monthLabel(state.month, "short")}`),
+      `${monthLabel(d.trend[0].month, "short")} to ${monthLabel(month, "short")}`),
   ].join("");
 
   $("#dash-progress").innerHTML = `
     <div class="progress-top">
-      <span><strong>${s.paid_cars} of ${plural(s.total_cars, "car")}</strong> paid rent for ${monthLabel(state.month)}</span>
+      <span><strong>${s.paid_cars} of ${plural(s.total_cars, "car")}</strong> paid rent for ${monthLabel(month)}</span>
       <span class="pct">${pct}%</span>
     </div>
     <div class="bar"><span style="width:${pct}%"></span></div>`;
@@ -282,7 +266,7 @@ async function renderDashboard() {
   const max = Math.max(1, ...d.trend.map(t => Math.max(t.expected, t.collected)));
   const h = (v: number) => (v ? Math.max(2, (v / max) * 100) : 0);
   $("#dash-chart").innerHTML = d.trend.map(t => `
-    <button class="col ${t.month === state.month ? "sel" : ""}" type="button" data-action="goto-month" data-month="${t.month}"
+    <button class="col ${t.month === month ? "sel" : ""}" type="button" data-action="goto-month" data-month="${t.month}"
       title="${monthLabel(t.month)}: ${rs(t.collected)} received out of ${rs(t.expected)}. ${t.paid_cars} of ${t.total_cars} cars paid.">
       <span class="val">${t.collected ? compact(t.collected) : ""}</span>
       <span class="track">
@@ -296,10 +280,12 @@ async function renderDashboard() {
 /* ---------- monthly rent ---------- */
 
 async function renderRent() {
-  const d = await api<MonthSheet>("month?m=" + state.month);
+  const month = state.month;
+  const [cars, payments] = await Promise.all([db.listCars(), db.paymentsBetween(month, month)]);
+  if (month !== state.month) return;
+  const d = monthSheet(cars, payments, month);
   remember(d.rows);
   state.sheet = d;
-  $<HTMLAnchorElement>("#rent-export").href = "/api/export?m=" + state.month;
   const s = d.summary;
   $("#rent-summary").innerHTML = `
     <div><span>Rent received</span><strong>${rs(s.collected)}</strong></div>
@@ -362,29 +348,33 @@ function drawRentTable() {
 async function quickReceive(btn: HTMLButtonElement, row: MonthRow) {
   const tr = btn.closest("tr")!;
   const amountInput = $<HTMLInputElement>(".in-amt", tr);
-  const amount = parseAmount(amountInput.value);
-  if (!(amount > 0)) {
-    toast("Please enter the amount received.", "error");
-    amountInput.focus();
-    return;
-  }
   btn.disabled = true;
   try {
-    const paid_on = $<HTMLInputElement>(".in-date", tr).value || todayISO();
-    await api("payments", { method: "POST", body: { car_id: row.id, month: state.month, amount, paid_on } });
-    toast(`Saved: ${row.name} (${row.number}) paid ${rs(amount)}`);
+    const payment = cleanPayment({
+      car_id: row.id, month: state.month, amount: amountInput.value,
+      paid_on: $<HTMLInputElement>(".in-date", tr).value,
+    });
+    await db.savePayment(payment);
+    toast(`Saved: ${row.name} (${row.number}) paid ${rs(payment.amount)}`);
     await render();
   } catch (err) {
     btn.disabled = false;
-    if (!(err instanceof LoginNeeded)) toast(errorText(err), "error");
+    handleError(err);
+    amountInput.focus();
   }
 }
 
 async function undoPayment(row: MonthRow) {
   if (!confirm(`Remove the rent entry for ${row.name} (${row.number}) for ${monthLabel(state.month)}?\n\nThe car will show as "Not paid" again.`)) return;
-  await api(`payments?car_id=${row.id}&month=${state.month}`, { method: "DELETE" });
+  await db.deletePayment(row.id, state.month);
   toast("Rent entry removed.");
   await render();
+}
+
+async function exportMonth() {
+  const month = state.month;
+  const [cars, payments] = await Promise.all([db.listCars(), db.paymentsBetween(month, month)]);
+  saveFile(monthCsv(monthSheet(cars, payments, month)), "text/csv;charset=utf-8", `rent-${month}.csv`);
 }
 
 /* ---------- cars ---------- */
@@ -406,13 +396,8 @@ function carFields(c: Partial<Car> = {}): string {
       <input name="notes" placeholder="Anything to remember" value="${esc(c.notes)}"></label>`;
 }
 
-function readCarForm(form: HTMLFormElement) {
-  const f = formValues(form);
-  return { ...f, monthly_rent: parseAmount(f.monthly_rent) };
-}
-
 async function renderCars() {
-  state.cars = (await api<{ cars: CarWithCount[] }>("cars")).cars;
+  state.cars = await db.listCars();
   drawCarsTable();
 }
 
@@ -427,9 +412,10 @@ function drawCarsTable() {
   $<HTMLInputElement>("input", toggle).checked = state.showRemoved;
 
   const q = state.carQuery.trim().toLowerCase();
-  const list = state.cars.filter(c =>
-    (state.showRemoved || c.active) &&
-    (!q || `${c.name} ${c.number} ${c.owner}`.toLowerCase().includes(q)));
+  const list = state.cars
+    .filter(c => (state.showRemoved || c.active) && (!q || `${c.name} ${c.number} ${c.owner}`.toLowerCase().includes(q)))
+    .sort((a, b) => Number(b.active) - Number(a.active)
+      || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.number.localeCompare(b.number));
 
   const body = $("#cars-body");
   if (!state.cars.length) {
@@ -457,15 +443,15 @@ function drawCarsTable() {
 
 async function deleteCar(c: Car) {
   if (!confirm(`Delete ${c.name} (${c.number})?`)) return;
-  const r = await api<{ archived: boolean }>("cars/" + c.id, { method: "DELETE" });
-  toast(r.archived
+  const hidden = await db.deleteCar(c.id);
+  toast(hidden
     ? `${c.number} has rent history, so it was moved to removed cars. Its history is kept.`
     : `${c.number} deleted.`);
   await renderCars();
 }
 
 async function restoreCar(c: Car) {
-  await api("cars/" + c.id, { method: "PUT", body: { active: true } });
+  await db.updateCar(c.id, { active: true });
   toast(`${c.number} is back in your car list.`);
   await renderCars();
 }
@@ -489,7 +475,7 @@ function openDialog(html: string, { wide = false, onSave }: { wide?: boolean; on
         await onSave(form);
         dlg.close();
       } catch (ex) {
-        if (!(ex instanceof LoginNeeded)) err.textContent = errorText(ex);
+        handleError(ex, msg => (err.textContent = msg));
       } finally {
         btn.disabled = false;
       }
@@ -501,11 +487,12 @@ function openDialog(html: string, { wide = false, onSave }: { wide?: boolean; on
 
 function openPaymentDialog(row: MonthRow) {
   const editing = row.paid;
+  const month = state.month;
   openDialog(`
     <form class="dlg" autocomplete="off">
       <header>
         <h3>${editing ? "Edit rent entry" : "Mark rent as paid"}</h3>
-        <p>${esc(row.name)} · <span class="plate">${esc(row.number)}</span> · ${monthLabel(state.month)}</p>
+        <p>${esc(row.name)} · <span class="plate">${esc(row.number)}</span> · ${monthLabel(month)}</p>
       </header>
       <div class="dlg-body">
         <label class="field"><span>Amount received (Rs)</span>
@@ -523,10 +510,9 @@ function openPaymentDialog(row: MonthRow) {
       </footer>
     </form>`, {
     onSave: async form => {
-      const f = formValues(form);
-      const amount = parseAmount(f.amount);
-      await api("payments", { method: "POST", body: { car_id: row.id, month: state.month, amount, paid_on: f.paid_on, note: f.note } });
-      toast(`Saved: ${row.name} (${row.number}) paid ${rs(amount)}`);
+      const payment = cleanPayment({ ...formValues(form), car_id: row.id, month });
+      await db.savePayment(payment);
+      toast(`Saved: ${row.name} (${row.number}) paid ${rs(payment.amount)}`);
       void render();
     },
   });
@@ -544,16 +530,15 @@ function openCarDialog(c: Car) {
     </form>`, {
     wide: true,
     onSave: async form => {
-      await api("cars/" + c.id, { method: "PUT", body: readCarForm(form) });
+      await db.updateCar(c.id, cleanCar(formValues(form)));
       toast("Car details saved.");
       void renderCars();
     },
   });
 }
 
-async function openHistory(id: number) {
-  const d = await api<CarHistory>(`cars/${id}/history`);
-  const c = d.car;
+async function openHistory(car: Car) {
+  const d = carHistory(car, await db.paymentsForCar(car.id));
   const rows = d.months.map(m => `
     <tr>
       <td>${monthLabel(m.month)}</td>
@@ -564,8 +549,8 @@ async function openHistory(id: number) {
   openDialog(`
     <div class="dlg">
       <header>
-        <h3>${esc(c.name)} <span class="plate">${esc(c.number)}</span></h3>
-        <p>Rent history · ${rs(c.monthly_rent)} per month${c.owner ? " · " + esc(c.owner) : ""}</p>
+        <h3>${esc(car.name)} <span class="plate">${esc(car.number)}</span></h3>
+        <p>Rent history · ${rs(car.monthly_rent)} per month${car.owner ? " · " + esc(car.owner) : ""}</p>
       </header>
       <div class="hist-stats">
         <div><span>Total received</span><strong>${rs(d.total)}</strong></div>
@@ -575,7 +560,7 @@ async function openHistory(id: number) {
       <div class="dlg-body flush">
         <table class="table">
           <thead><tr><th>Month</th><th>Status</th><th class="num">Amount</th><th class="h-date">Date received</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="4" class="empty">Rent starts from ${monthLabel(c.start_month)}.</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="4" class="empty">Rent starts from ${monthLabel(car.start_month)}.</td></tr>`}</tbody>
         </table>
       </div>
       <footer><button class="btn primary" type="button" data-action="close-dlg">Close</button></footer>
@@ -585,7 +570,7 @@ async function openHistory(id: number) {
 function openPasswordDialog() {
   openDialog(`
     <form class="dlg" autocomplete="off">
-      <header><h3>Change password</h3><p>You will stay logged in on this device. Other devices will need the new password.</p></header>
+      <header><h3>Change password</h3><p>Use at least 6 characters.</p></header>
       <div class="dlg-body">
         <label class="field"><span>Current password</span>
           <input name="current" type="password" required data-autofocus autocomplete="current-password"></label>
@@ -602,11 +587,24 @@ function openPasswordDialog() {
     </form>`, {
     onSave: async form => {
       const f = formValues(form);
+      if (f.new.length < 6) throw new Error("The new password must be at least 6 characters.");
       if (f.new !== f.confirm) throw new Error("The two new passwords do not match.");
-      await api("password", { method: "POST", body: { current: f.current, new: f.new } });
+      const { data } = await db.supabase.auth.getUser();
+      const email = data.user?.email;
+      if (!email) throw new db.SessionError("Please log in again.");
+      const check = await db.supabase.auth.signInWithPassword({ email, password: f.current });
+      if (check.error) throw new Error("Current password is wrong.");
+      const { error } = await db.supabase.auth.updateUser({ password: f.new });
+      if (error) throw new Error(error.message);
       toast("Password changed.");
     },
   });
+}
+
+async function downloadBackup() {
+  const backup = await db.exportAll();
+  saveFile(JSON.stringify(backup, null, 1), "application/json", `mashaal-rent-backup-${todayISO()}.json`);
+  toast(`Backup downloaded: ${plural(backup.cars.length, "car")}, ${backup.payments.length} rent ${backup.payments.length === 1 ? "entry" : "entries"}.`);
 }
 
 function openRestoreDialog() {
@@ -631,14 +629,15 @@ function openRestoreDialog() {
     onSave: async form => {
       const file = $<HTMLInputElement>("input[type=file]", form).files?.[0];
       if (!file) throw new Error("Please choose a backup file.");
-      let backup: unknown;
+      let parsed: unknown;
       try {
-        backup = JSON.parse(await file.text());
+        parsed = JSON.parse(await file.text());
       } catch {
         throw new Error("This file is not a backup file.");
       }
-      const r = await api<{ cars: number; payments: number }>("restore", { method: "POST", body: backup });
-      toast(`Backup restored: ${plural(r.cars, "car")} and ${r.payments} rent ${r.payments === 1 ? "entry" : "entries"}.`);
+      const backup = checkBackup(parsed);
+      await db.restoreAll(backup);
+      toast(`Backup restored: ${plural(backup.cars.length, "car")} and ${backup.payments.length} rent ${backup.payments.length === 1 ? "entry" : "entries"}.`);
       void render();
     },
   });
@@ -670,16 +669,16 @@ document.addEventListener("click", e => {
     case "edit-pay": if (row) openPaymentDialog(row); break;
     case "quick-receive": if (row) void quickReceive(el as HTMLButtonElement, row); break;
     case "undo-pay": if (row) void run(() => undoPayment(row)); break;
+    case "export": void run(exportMonth); break;
     case "edit-car": if (car) openCarDialog(car); break;
     case "delete-car": if (car) void run(() => deleteCar(car)); break;
     case "restore-car": if (car) void run(() => restoreCar(car)); break;
-    case "history": void run(() => openHistory(id)); break;
+    case "history": if (car) void run(() => openHistory(car)); break;
     case "close-dlg": dlg.close(); break;
-    case "change-password": openPasswordDialog(); break;
+    case "backup": void run(downloadBackup); break;
     case "restore-backup": openRestoreDialog(); break;
-    case "logout":
-      void run(async () => { await api("logout", { method: "POST" }); showAuth("login"); });
-      break;
+    case "change-password": openPasswordDialog(); break;
+    case "logout": void run(() => db.supabase.auth.signOut()); break;
   }
 });
 
@@ -724,13 +723,13 @@ $<HTMLFormElement>("#car-form").addEventListener("submit", async e => {
   err.textContent = "";
   btn.disabled = true;
   try {
-    const { car } = await api<{ car: Car }>("cars", { method: "POST", body: readCarForm(form) });
+    const car = await db.addCar(cleanCar(formValues(form)));
     toast(`${car.name} (${car.number}) added.`);
     form.reset();
     $<HTMLInputElement>("input[name=name]", form).focus();
     await renderCars();
   } catch (ex) {
-    if (!(ex instanceof LoginNeeded)) err.textContent = errorText(ex);
+    handleError(ex, msg => (err.textContent = msg));
   } finally {
     btn.disabled = false;
   }
@@ -743,18 +742,30 @@ window.addEventListener("hashchange", () => {
 
 /* ================= start ================= */
 
+function showSetupNeeded() {
+  document.body.innerHTML = `
+    <div class="auth"><div class="auth-card">
+      <h1>Almost ready</h1>
+      <p class="auth-text">The app is not connected to Supabase yet. Open <code>src/client/config.ts</code>,
+        paste your Supabase project URL and anon key, then build and deploy again.</p>
+    </div></div>`;
+}
+
 async function start() {
+  if (!db.isConfigured) {
+    showSetupNeeded();
+    return;
+  }
   $(".form-grid", $("#car-form")).innerHTML = carFields();
   buildMonthSwitches();
   $("#today").textContent = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  try {
-    const s = await api<SessionInfo>("session");
-    if (s.setup_needed) showAuth("setup");
-    else if (!s.logged_in) showAuth("login");
-    else showApp();
-  } catch (err) {
-    document.body.innerHTML = `<div class="auth"><div class="auth-card"><h1>Can't open the app</h1><p class="auth-text">${esc(errorText(err))}</p></div></div>`;
-  }
+
+  db.supabase.auth.onAuthStateChange(event => {
+    if (event === "SIGNED_OUT") showAuth();
+  });
+  const { data } = await db.supabase.auth.getSession();
+  if (data.session) showApp(data.session.user.email);
+  else showAuth();
 }
 
 void start();

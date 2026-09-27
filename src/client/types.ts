@@ -1,4 +1,4 @@
-// Shapes shared by the server (Netlify Function) and the page.
+// Rows as they are stored in Supabase (see supabase/schema.sql).
 
 export interface Car {
   id: number;
@@ -20,17 +20,8 @@ export interface Payment {
   note: string;
 }
 
-/** Everything the app stores, saved as one JSON document. */
-export interface AppData {
-  version: 1;
-  next_id: number;
-  cars: Car[];
-  payments: Payment[];
-}
-
-export interface CarWithCount extends Car {
-  payment_count: number;
-}
+/** The fields you type in when adding or editing a car. */
+export type CarFields = Pick<Car, "name" | "number" | "owner" | "notes" | "monthly_rent" | "start_month">;
 
 /** One car's line for a given month. */
 export interface MonthRow {
@@ -81,11 +72,6 @@ export interface CarHistory {
   total: number;
   paid_months: number;
   pending_months: number;
-}
-
-export interface SessionInfo {
-  setup_needed: boolean;
-  logged_in: boolean;
 }
 
 /** The file made by "Download backup". */

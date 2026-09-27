@@ -6,10 +6,10 @@ A simple web app to keep track of monthly car rent.
 - **Monthly Rent**: each month, mark which cars have paid.
 - **Dashboard**: total rent received, how many cars paid and how many didn't, and a 12-month chart.
 
-It works on computers and phones, needs a password to open, and has backup and restore.
+It works on computers and phones, needs a login, and has backup and restore.
 
-Built with **TypeScript**. It runs on **Netlify**: a Netlify Function for the server part
-and **Netlify Blobs** for the data.
+Built with **TypeScript** and **Supabase** (database and login). The website is plain
+static files, so it runs on **Netlify** or **Vercel** without any server.
 
 ## Put it online
 
@@ -28,10 +28,9 @@ Then open http://127.0.0.1:8765
 
 | Path | What it is |
 | --- | --- |
-| `public/` | The page (HTML and CSS). `app.js` is built from `src/client/app.ts`. |
-| `src/client/app.ts` | Page code |
-| `src/server/core.ts` | All server logic: login, cars, rent, backup |
-| `src/server/blob-store.ts` | Saves data in Netlify Blobs |
-| `src/server/file-store.ts` | Saves data in `.data/` when testing on your computer |
-| `netlify/functions/api.ts` | The Netlify Function that answers `/api/*` |
-| `scripts/dev.ts` | Local test server |
+| `supabase/schema.sql` | Database tables, security rules and the restore function. Run once in Supabase. |
+| `src/client/config.ts` | Your Supabase project URL and anon key |
+| `src/client/app.ts` | Screens and buttons |
+| `src/client/db.ts` | Reading and saving data in Supabase |
+| `src/client/rent.ts` | Rent calculations and input checks |
+| `public/` | The page (HTML and CSS). `app.js` is built from `src/client/`. |

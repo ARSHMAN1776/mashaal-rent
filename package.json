@@ -1,25 +1,22 @@
 {
   "name": "mashaal-rent",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "description": "Monthly rent register for Mashaal Rent a Car",
   "scripts": {
     "build": "tsc && esbuild src/client/app.ts --bundle --minify --target=es2020 --outfile=public/app.js",
-    "dev": "npm run build && tsx scripts/dev.ts",
+    "dev": "esbuild src/client/app.ts --bundle --target=es2020 --outfile=public/app.js --servedir=public --serve=127.0.0.1:8765",
     "check": "tsc"
   },
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "@netlify/blobs": "^11.1.1"
-  },
   "devDependencies": {
-    "@netlify/functions": "^6.0.0",
-    "@types/node": "^26.6.3",
     "esbuild": "^0.28.2",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2"
   }
 }

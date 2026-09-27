@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node"],
+    "types": [],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -13,5 +13,5 @@
     "noUnusedLocals": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "scripts", "netlify"]
+  "include": ["src"]
 }
